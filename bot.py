@@ -84,6 +84,72 @@ async def submit_clip(
     await db.update_clip_message_id(clip_id, msg.id)
 
 
+# ── /guess ─────────────────────────────────────────────────────────────────────
+
+@client.tree.command(name="guess", description="Guess the rank of a submitted clip")
+@app_commands.describe(
+    clip_id="The clip ID you want to guess",
+    rank="Your rank tier guess",
+    division="Your division guess — leave empty for Master and above",
+)
+@app_commands.choices(rank=TIER_CHOICES, division=DIVISION_CHOICES)
+async def guess(
+    interaction: discord.Interaction,
+    clip_id: int,
+    rank: app_commands.Choice[str],
+    division: Optional[app_commands.Choice[str]] = None,
+):
+    clip = await db.get_clip(clip_id)
+
+    if not clip:
+        await interaction.response.send_message(f"❌ Clip #{clip_id} does not exist.", ephemeral=True)
+        return
+
+    if clip["guild_id"] != interaction.guild_id:
+        await interaction.response.send_message("❌ That clip is not from this server.", ephemeral=True)
+        return
+
+    if clip["status"] == "revealed":
+        await interaction.response.send_message(
+            f"❌ Clip #{clip_id} has already been revealed. Guessing is closed.", ephemeral=True
+        )
+        return
+
+    if clip["submitter_id"] == interaction.user.id:
+        await interaction.response.send_message("❌ You cannot guess on your own clip!", ephemeral=True)
+        return
+
+    existing = await db.get_existing_guess(clip_id, interaction.user.id)
+    if existing:
+        prior = emb.format_rank(existing["guessed_tier"], existing["guessed_rank"])
+        await interaction.response.send_message(
+            f"❌ You already guessed **{prior}** on Clip #{clip_id}.", ephemeral=True
+        )
+        return
+
+    tier = rank.value
+    div  = division.value if division else ""
+
+    if tier in TIERS_WITH_DIVISION and not div:
+        await interaction.response.send_message(
+            f"❌ **{tier}** requires a division (I, II, III, or IV).", ephemeral=True
+        )
+        return
+
+    if tier not in TIERS_WITH_DIVISION:
+        div = ""
+
+    await db.insert_guess(clip_id, interaction.user.id, tier, div)
+
+    full_rank  = emb.format_rank(tier, div)
+    reveal_ts  = int(datetime.fromisoformat(clip["reveal_at"]).timestamp())
+    await interaction.response.send_message(
+        f"✅ Guess recorded: **{full_rank}** for Clip #{clip_id}.\n"
+        f"Results reveal <t:{reveal_ts}:R>.",
+        ephemeral=True,
+    )
+
+
 # ── entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
