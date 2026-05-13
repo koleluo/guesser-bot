@@ -1,6 +1,7 @@
 import os
 import discord
 from discord import app_commands
+from discord.ext import tasks
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -30,13 +31,69 @@ class RankBot(discord.Client):
     async def setup_hook(self):
         await db.create_tables()
         await self.tree.sync()
+        self.auto_reveal_loop.start()
 
     async def on_ready(self):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print(f"Connected to {len(self.guilds)} guild(s)")
 
+    @tasks.loop(minutes=5)
+    async def auto_reveal_loop(self):
+        clips = await db.get_pending_clips_to_reveal()
+        for clip in clips:
+            try:
+                await do_reveal(self, clip["id"])
+            except Exception as e:
+                print(f"[auto-reveal] Error on clip #{clip['id']}: {e}")
+
+    @auto_reveal_loop.before_loop
+    async def before_auto_reveal(self):
+        await self.wait_until_ready()
+
 
 client = RankBot()
+
+
+# ── shared reveal logic ────────────────────────────────────────────────────────
+
+async def do_reveal(bot: discord.Client, clip_id: int):
+    clip = await db.get_clip(clip_id)
+    if not clip or clip["status"] != "pending":
+        return
+
+    # Mark revealed first to prevent double-runs from the background task
+    await db.reveal_clip(clip_id)
+    results = await db.score_and_update_leaderboard(
+        clip_id, clip["actual_tier"], clip["actual_rank"], clip["guild_id"]
+    )
+
+    channel = bot.get_channel(clip["channel_id"])
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(clip["channel_id"])
+        except Exception:
+            return
+
+    try:
+        submitter = await bot.fetch_user(clip["submitter_id"])
+        submitter_name = submitter.display_name
+    except Exception:
+        submitter_name = f"User {clip['submitter_id']}"
+
+    await channel.send(embed=emb.reveal_embed(dict(clip), results, submitter_name))
+
+    if clip["message_id"]:
+        try:
+            msg = await channel.fetch_message(clip["message_id"])
+            closed = discord.Embed(
+                title=f"\U0001f513 Clip #{clip_id} — Revealed!",
+                description="This clip has been revealed. Check the message below for results.",
+                color=0x2ecc71,
+            )
+            closed.set_footer(text=f"RankBot • Clip #{clip_id}")
+            await msg.edit(embed=closed, view=None)
+        except Exception:
+            pass
 
 
 # ── /submitclip ────────────────────────────────────────────────────────────────
@@ -148,6 +205,41 @@ async def guess(
         f"Results reveal <t:{reveal_ts}:R>.",
         ephemeral=True,
     )
+
+
+# ── /reveal ────────────────────────────────────────────────────────────────────
+
+@client.tree.command(name="reveal", description="Reveal the rank of a clip and score all guesses")
+@app_commands.describe(clip_id="The clip ID to reveal")
+async def reveal(interaction: discord.Interaction, clip_id: int):
+    clip = await db.get_clip(clip_id)
+
+    if not clip:
+        await interaction.response.send_message(f"❌ Clip #{clip_id} does not exist.", ephemeral=True)
+        return
+
+    if clip["guild_id"] != interaction.guild_id:
+        await interaction.response.send_message("❌ That clip is not from this server.", ephemeral=True)
+        return
+
+    if clip["status"] == "revealed":
+        await interaction.response.send_message(
+            f"❌ Clip #{clip_id} has already been revealed.", ephemeral=True
+        )
+        return
+
+    is_admin     = isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator
+    is_submitter = clip["submitter_id"] == interaction.user.id
+
+    if not is_admin and not is_submitter:
+        await interaction.response.send_message(
+            "❌ Only the clip submitter or a server admin can reveal this clip.", ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(thinking=True)
+    await do_reveal(client, clip_id)
+    await interaction.followup.send(f"✅ Clip #{clip_id} has been revealed!", ephemeral=True)
 
 
 # ── entry point ────────────────────────────────────────────────────────────────
