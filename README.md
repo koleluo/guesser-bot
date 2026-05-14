@@ -44,8 +44,8 @@ A Discord bot for gaming servers where members submit gameplay clips with a hidd
 
 ```bash
 # Clone the repo and navigate into it
-git clone https://github.com/lklklk7/rank-guess-bot.git
-cd rank-guess-bot
+git clone https://github.com/lklklk7/guesser-bot.git
+cd guesser-bot
 
 # Copy the example env file
 cp .env.example .env
