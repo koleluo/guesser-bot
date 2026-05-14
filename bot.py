@@ -280,6 +280,20 @@ async def profile(
     await interaction.response.send_message(embed=embed)
 
 
+# ── /history ───────────────────────────────────────────────────────────────────
+
+@client.tree.command(name="history", description="View recently revealed clips in this server")
+@app_commands.describe(limit="Number of clips to show (default: 5, max: 20)")
+async def history(
+    interaction: discord.Interaction,
+    limit: int = 5,
+):
+    limit = max(1, min(limit, 20))
+    clips = await db.get_history(interaction.guild_id, limit)
+    embed = emb.history_embed([dict(c) for c in clips], interaction.guild.name)
+    await interaction.response.send_message(embed=embed)
+
+
 # ── entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
