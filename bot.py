@@ -242,6 +242,44 @@ async def reveal(interaction: discord.Interaction, clip_id: int):
     await interaction.followup.send(f"✅ Clip #{clip_id} has been revealed!", ephemeral=True)
 
 
+# ── /leaderboard ───────────────────────────────────────────────────────────────
+
+@client.tree.command(name="leaderboard", description="View the rank guessing leaderboard")
+@app_commands.describe(scope="View all-time or weekly performance")
+@app_commands.choices(scope=[
+    app_commands.Choice(name="All Time", value="alltime"),
+    app_commands.Choice(name="Weekly",   value="weekly"),
+])
+async def leaderboard(
+    interaction: discord.Interaction,
+    scope: Optional[app_commands.Choice[str]] = None,
+):
+    scope_val = scope.value if scope else "alltime"
+
+    if scope_val == "weekly":
+        rows = await db.get_leaderboard_weekly(interaction.guild_id, limit=10)
+    else:
+        rows = await db.get_leaderboard(interaction.guild_id, limit=10)
+
+    scores = [dict(r) for r in rows]
+    embed  = emb.leaderboard_embed(scores, scope_val, interaction.guild.name)
+    await interaction.response.send_message(embed=embed)
+
+
+# ── /profile ───────────────────────────────────────────────────────────────────
+
+@client.tree.command(name="profile", description="View a user's rank guessing stats")
+@app_commands.describe(user="The user to view — defaults to yourself")
+async def profile(
+    interaction: discord.Interaction,
+    user: Optional[discord.Member] = None,
+):
+    target = user or interaction.user
+    stats  = await db.get_user_stats(target.id, interaction.guild_id)
+    embed  = emb.profile_embed(target, dict(stats) if stats else None)
+    await interaction.response.send_message(embed=embed)
+
+
 # ── entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
