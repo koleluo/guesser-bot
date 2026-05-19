@@ -1,9 +1,9 @@
 import aiosqlite
 from datetime import datetime, timedelta, timezone
 
-DB_PATH = "database.db"
+import ranks
 
-TIERS_WITH_DIVISION = {"Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald", "Diamond"}
+DB_PATH = "database.db"
 
 
 async def create_tables():
@@ -13,6 +13,7 @@ async def create_tables():
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 submitter_id INTEGER NOT NULL,
                 video_url    TEXT    NOT NULL,
+                game         TEXT    NOT NULL DEFAULT 'League of Legends',
                 actual_tier  TEXT    NOT NULL,
                 actual_rank  TEXT    NOT NULL DEFAULT '',
                 channel_id   INTEGER NOT NULL,
@@ -23,6 +24,14 @@ async def create_tables():
                 reveal_at    TEXT    NOT NULL
             )
         """)
+        # Migration: add game column to existing databases
+        try:
+            await db.execute(
+                "ALTER TABLE clips ADD COLUMN game TEXT NOT NULL DEFAULT 'League of Legends'"
+            )
+        except Exception:
+            pass
+
         await db.execute("""
             CREATE TABLE IF NOT EXISTS guesses (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,14 +60,14 @@ async def create_tables():
         await db.commit()
 
 
-async def insert_clip(submitter_id, video_url, actual_tier, actual_rank, channel_id, guild_id, reveal_at):
+async def insert_clip(submitter_id, video_url, game, actual_tier, actual_rank, channel_id, guild_id, reveal_at):
     now = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
             """INSERT INTO clips
-               (submitter_id, video_url, actual_tier, actual_rank, channel_id, guild_id, submitted_at, reveal_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (submitter_id, video_url, actual_tier, actual_rank, channel_id, guild_id, now, reveal_at),
+               (submitter_id, video_url, game, actual_tier, actual_rank, channel_id, guild_id, submitted_at, reveal_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (submitter_id, video_url, game, actual_tier, actual_rank, channel_id, guild_id, now, reveal_at),
         )
         await db.commit()
         return cursor.lastrowid
@@ -75,6 +84,13 @@ async def get_clip(clip_id):
         db.row_factory = aiosqlite.Row
         cursor = await db.execute("SELECT * FROM clips WHERE id = ?", (clip_id,))
         return await cursor.fetchone()
+
+
+async def get_all_pending_clips():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM clips WHERE status = 'pending'")
+        return await cursor.fetchall()
 
 
 async def get_pending_clips_to_reveal():
@@ -121,7 +137,7 @@ async def get_clip_guess_count(clip_id):
         return row[0] if row else 0
 
 
-async def score_and_update_leaderboard(clip_id, actual_tier, actual_rank, guild_id):
+async def score_and_update_leaderboard(clip_id, game, actual_tier, actual_rank, guild_id):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute("SELECT * FROM guesses WHERE clip_id = ?", (clip_id,))
@@ -129,19 +145,16 @@ async def score_and_update_leaderboard(clip_id, actual_tier, actual_rank, guild_
 
         results = []
         for guess in guesses:
-            tier_match = guess["guessed_tier"].lower() == actual_tier.lower()
-            no_division = actual_rank == ""
-            rank_match = guess["guessed_rank"].lower() == actual_rank.lower()
-
-            exact   = tier_match and (rank_match or no_division)
-            correct = tier_match
-            points  = 3 if exact else (1 if correct else 0)
+            correct, exact, points = ranks.score_guess(
+                game,
+                actual_tier, actual_rank,
+                guess["guessed_tier"], guess["guessed_rank"],
+            )
 
             await db.execute(
                 "UPDATE guesses SET is_correct = ?, exact_match = ?, points_awarded = ? WHERE id = ?",
                 (1 if correct else 0, 1 if exact else 0, points, guess["id"]),
             )
-
             await db.execute(
                 """INSERT INTO leaderboard (user_id, guild_id, total_guesses, correct_guesses, exact_matches, total_points)
                    VALUES (?, ?, 1, ?, ?, ?)
