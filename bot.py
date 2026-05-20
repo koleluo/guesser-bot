@@ -8,20 +8,132 @@ from typing import Optional
 
 import database as db
 import embeds as emb
+import ranks
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-TIERS = [
-    "Iron", "Bronze", "Silver", "Gold", "Platinum",
-    "Emerald", "Diamond", "Master", "Grandmaster", "Challenger",
-]
-TIERS_WITH_DIVISION = {"Iron", "Bronze", "Silver", "Gold", "Platinum", "Emerald", "Diamond"}
-DIVISIONS = ["I", "II", "III", "IV"]
+GAME_CHOICES = [app_commands.Choice(name=g, value=g) for g in ranks.GAME_CHOICES]
 
-TIER_CHOICES     = [app_commands.Choice(name=t, value=t) for t in TIERS]
-DIVISION_CHOICES = [app_commands.Choice(name=d, value=d) for d in DIVISIONS]
 
+# ── button views ───────────────────────────────────────────────────────────────
+
+class TierButton(discord.ui.Button):
+    def __init__(self, clip_id: int, game: str, tier: str, label: str, row: int):
+        super().__init__(
+            style=discord.ButtonStyle.secondary,
+            label=label,
+            custom_id=f"tier|{clip_id}|{tier}",
+            row=row,
+        )
+        self.clip_id = clip_id
+        self.game    = game
+        self.tier    = tier
+
+    async def callback(self, interaction: discord.Interaction):
+        await _handle_tier(interaction, self.clip_id, self.game, self.tier)
+
+
+class GuessView(discord.ui.View):
+    def __init__(self, clip_id: int, game: str):
+        super().__init__(timeout=None)
+        tiers  = ranks.get_tiers(game)
+        labels = ranks.get_btn_labels(game)
+        for i, (tier, label) in enumerate(zip(tiers, labels)):
+            self.add_item(TierButton(clip_id, game, tier, label, row=i // 5))
+
+
+class DivisionButton(discord.ui.Button):
+    def __init__(self, clip_id: int, game: str, tier: str, division: str):
+        super().__init__(
+            style=discord.ButtonStyle.primary,
+            label=division,
+            custom_id=f"div|{clip_id}|{tier}|{division}",
+        )
+        self.clip_id  = clip_id
+        self.game     = game
+        self.tier     = tier
+        self.division = division
+
+    async def callback(self, interaction: discord.Interaction):
+        await _handle_division(interaction, self.clip_id, self.game, self.tier, self.division)
+
+
+class DivisionView(discord.ui.View):
+    def __init__(self, clip_id: int, game: str, tier: str):
+        super().__init__(timeout=60)
+        for div in ranks.get_divisions(game):
+            self.add_item(DivisionButton(clip_id, game, tier, div))
+
+
+# ── button handlers ────────────────────────────────────────────────────────────
+
+async def _check_guess_eligible(interaction: discord.Interaction, clip_id: int) -> dict | None:
+    """Returns the clip dict if guessing is allowed, otherwise sends an error and returns None."""
+    clip = await db.get_clip(clip_id)
+
+    if not clip or clip["status"] != "pending":
+        await interaction.response.send_message(
+            "❌ This clip is no longer accepting guesses.", ephemeral=True
+        )
+        return None
+
+    if clip["submitter_id"] == interaction.user.id:
+        await interaction.response.send_message(
+            "❌ You cannot guess on your own clip!", ephemeral=True
+        )
+        return None
+
+    existing = await db.get_existing_guess(clip_id, interaction.user.id)
+    if existing:
+        prior = ranks.format_rank(
+            clip.get("game", "League of Legends"),
+            existing["guessed_tier"], existing["guessed_rank"]
+        )
+        await interaction.response.send_message(
+            f"❌ You already guessed **{prior}** on this clip.", ephemeral=True
+        )
+        return None
+
+    return dict(clip)
+
+
+async def _handle_tier(interaction: discord.Interaction, clip_id: int, game: str, tier: str):
+    clip = await _check_guess_eligible(interaction, clip_id)
+    if clip is None:
+        return
+
+    if ranks.tier_needs_division(game, tier):
+        view = DivisionView(clip_id, game, tier)
+        await interaction.response.send_message(
+            f"You picked **{tier}**. Now choose a division:",
+            view=view,
+            ephemeral=True,
+        )
+    else:
+        await db.insert_guess(clip_id, interaction.user.id, tier, "")
+        full_rank = ranks.format_rank(game, tier)
+        await interaction.response.send_message(
+            f"✅ Guess locked in: **{full_rank}**!", ephemeral=True
+        )
+
+
+async def _handle_division(
+    interaction: discord.Interaction,
+    clip_id: int, game: str, tier: str, division: str,
+):
+    clip = await _check_guess_eligible(interaction, clip_id)
+    if clip is None:
+        return
+
+    await db.insert_guess(clip_id, interaction.user.id, tier, division)
+    full_rank = ranks.format_rank(game, tier, division)
+    await interaction.response.send_message(
+        f"✅ Guess locked in: **{full_rank}**!", ephemeral=True
+    )
+
+
+# ── bot ────────────────────────────────────────────────────────────────────────
 
 class RankBot(discord.Client):
     def __init__(self):
@@ -30,6 +142,10 @@ class RankBot(discord.Client):
 
     async def setup_hook(self):
         await db.create_tables()
+        # Re-register persistent views for all clips still awaiting guesses
+        pending = await db.get_all_pending_clips()
+        for clip in pending:
+            self.add_view(GuessView(clip["id"], clip.get("game", "League of Legends")))
         await self.tree.sync()
         self.auto_reveal_loop.start()
 
@@ -61,10 +177,11 @@ async def do_reveal(bot: discord.Client, clip_id: int):
     if not clip or clip["status"] != "pending":
         return
 
-    # Mark revealed first to prevent double-runs from the background task
     await db.reveal_clip(clip_id)
+
+    game = clip.get("game", "League of Legends")
     results = await db.score_and_update_leaderboard(
-        clip_id, clip["actual_tier"], clip["actual_rank"], clip["guild_id"]
+        clip_id, game, clip["actual_tier"], clip["actual_rank"], clip["guild_id"]
     )
 
     channel = bot.get_channel(clip["channel_id"])
@@ -75,7 +192,7 @@ async def do_reveal(bot: discord.Client, clip_id: int):
             return
 
     try:
-        submitter = await bot.fetch_user(clip["submitter_id"])
+        submitter      = await bot.fetch_user(clip["submitter_id"])
         submitter_name = submitter.display_name
     except Exception:
         submitter_name = f"User {clip['submitter_id']}"
@@ -85,48 +202,57 @@ async def do_reveal(bot: discord.Client, clip_id: int):
     if clip["message_id"]:
         try:
             msg = await channel.fetch_message(clip["message_id"])
-            closed = discord.Embed(
-                title=f"\U0001f513 Clip #{clip_id} — Revealed!",
-                description="This clip has been revealed. Check the message below for results.",
-                color=0x2ecc71,
-            )
-            closed.set_footer(text=f"RankBot • Clip #{clip_id}")
-            await msg.edit(embed=closed, view=None)
+            await msg.edit(embed=emb.revealed_closed_embed(clip_id), view=discord.ui.View())
         except Exception:
             pass
 
 
 # ── /submitclip ────────────────────────────────────────────────────────────────
 
-@client.tree.command(name="submitclip", description="Submit a gameplay clip for others to guess your rank")
+@client.tree.command(name="submitclip", description="Submit a gameplay clip — others will guess your rank")
 @app_commands.describe(
-    video_url="Link to your gameplay clip",
-    rank="Your actual rank tier",
-    division="Your division — leave empty for Master, Grandmaster, or Challenger",
+    game="Which game is this clip from?",
+    video_url="Link to the clip",
+    rank="Your actual rank (start typing for suggestions)",
+    division="Your division, if applicable",
 )
-@app_commands.choices(rank=TIER_CHOICES, division=DIVISION_CHOICES)
+@app_commands.choices(game=GAME_CHOICES)
 async def submit_clip(
     interaction: discord.Interaction,
+    game: app_commands.Choice[str],
     video_url: str,
-    rank: app_commands.Choice[str],
-    division: Optional[app_commands.Choice[str]] = None,
+    rank: str,
+    division: Optional[str] = None,
 ):
-    tier = rank.value
-    div  = division.value if division else ""
+    game_name = game.value
+    tier      = rank.strip()
+    div       = division.strip() if division else ""
 
-    if tier in TIERS_WITH_DIVISION and not div:
+    # Validate tier
+    valid_tiers = ranks.get_tiers(game_name)
+    if tier not in valid_tiers:
         await interaction.response.send_message(
-            f"❌ **{tier}** requires a division (I, II, III, or IV).", ephemeral=True
+            f"❌ **{tier}** is not a valid {game_name} rank.\nValid options: {', '.join(valid_tiers)}",
+            ephemeral=True,
         )
         return
 
-    if tier not in TIERS_WITH_DIVISION:
+    # Validate division
+    if ranks.tier_needs_division(game_name, tier) and not div:
+        divs = ranks.get_divisions(game_name)
+        await interaction.response.send_message(
+            f"❌ **{tier}** requires a division ({', '.join(divs)}).", ephemeral=True
+        )
+        return
+
+    if not ranks.tier_needs_division(game_name, tier):
         div = ""
 
     reveal_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
-    clip_id = await db.insert_clip(
+    clip_id   = await db.insert_clip(
         submitter_id=interaction.user.id,
         video_url=video_url,
+        game=game_name,
         actual_tier=tier,
         actual_rank=div,
         channel_id=interaction.channel_id,
@@ -134,77 +260,35 @@ async def submit_clip(
         reveal_at=reveal_at,
     )
 
-    embed = emb.clip_submission_embed(clip_id, video_url, interaction.user.display_name, reveal_at, 0)
-    await interaction.response.send_message(embed=embed)
+    view    = GuessView(clip_id, game_name)
+    content = emb.submission_content(clip_id, game_name, interaction.user.display_name, reveal_at)
+    await interaction.response.send_message(content=f"{content}\n{video_url}", view=view)
+    client.add_view(view)  # register for persistence after this message is sent
 
     msg = await interaction.original_response()
     await db.update_clip_message_id(clip_id, msg.id)
 
 
-# ── /guess ─────────────────────────────────────────────────────────────────────
+@submit_clip.autocomplete("rank")
+async def rank_autocomplete(interaction: discord.Interaction, current: str):
+    game_name = getattr(interaction.namespace, "game", None) or "League of Legends"
+    tiers     = ranks.get_tiers(game_name)
+    return [
+        app_commands.Choice(name=t, value=t)
+        for t in tiers if current.lower() in t.lower()
+    ][:25]
 
-@client.tree.command(name="guess", description="Guess the rank of a submitted clip")
-@app_commands.describe(
-    clip_id="The clip ID you want to guess",
-    rank="Your rank tier guess",
-    division="Your division guess — leave empty for Master and above",
-)
-@app_commands.choices(rank=TIER_CHOICES, division=DIVISION_CHOICES)
-async def guess(
-    interaction: discord.Interaction,
-    clip_id: int,
-    rank: app_commands.Choice[str],
-    division: Optional[app_commands.Choice[str]] = None,
-):
-    clip = await db.get_clip(clip_id)
 
-    if not clip:
-        await interaction.response.send_message(f"❌ Clip #{clip_id} does not exist.", ephemeral=True)
-        return
-
-    if clip["guild_id"] != interaction.guild_id:
-        await interaction.response.send_message("❌ That clip is not from this server.", ephemeral=True)
-        return
-
-    if clip["status"] == "revealed":
-        await interaction.response.send_message(
-            f"❌ Clip #{clip_id} has already been revealed. Guessing is closed.", ephemeral=True
-        )
-        return
-
-    if clip["submitter_id"] == interaction.user.id:
-        await interaction.response.send_message("❌ You cannot guess on your own clip!", ephemeral=True)
-        return
-
-    existing = await db.get_existing_guess(clip_id, interaction.user.id)
-    if existing:
-        prior = emb.format_rank(existing["guessed_tier"], existing["guessed_rank"])
-        await interaction.response.send_message(
-            f"❌ You already guessed **{prior}** on Clip #{clip_id}.", ephemeral=True
-        )
-        return
-
-    tier = rank.value
-    div  = division.value if division else ""
-
-    if tier in TIERS_WITH_DIVISION and not div:
-        await interaction.response.send_message(
-            f"❌ **{tier}** requires a division (I, II, III, or IV).", ephemeral=True
-        )
-        return
-
-    if tier not in TIERS_WITH_DIVISION:
-        div = ""
-
-    await db.insert_guess(clip_id, interaction.user.id, tier, div)
-
-    full_rank  = emb.format_rank(tier, div)
-    reveal_ts  = int(datetime.fromisoformat(clip["reveal_at"]).timestamp())
-    await interaction.response.send_message(
-        f"✅ Guess recorded: **{full_rank}** for Clip #{clip_id}.\n"
-        f"Results reveal <t:{reveal_ts}:R>.",
-        ephemeral=True,
-    )
+@submit_clip.autocomplete("division")
+async def division_autocomplete(interaction: discord.Interaction, current: str):
+    game_name = getattr(interaction.namespace, "game", None) or "League of Legends"
+    tier      = getattr(interaction.namespace, "rank", None) or ""
+    if not ranks.tier_needs_division(game_name, tier):
+        return []
+    return [
+        app_commands.Choice(name=d, value=d)
+        for d in ranks.get_divisions(game_name) if current in d
+    ]
 
 
 # ── /reveal ────────────────────────────────────────────────────────────────────
@@ -217,20 +301,15 @@ async def reveal(interaction: discord.Interaction, clip_id: int):
     if not clip:
         await interaction.response.send_message(f"❌ Clip #{clip_id} does not exist.", ephemeral=True)
         return
-
     if clip["guild_id"] != interaction.guild_id:
         await interaction.response.send_message("❌ That clip is not from this server.", ephemeral=True)
         return
-
     if clip["status"] == "revealed":
-        await interaction.response.send_message(
-            f"❌ Clip #{clip_id} has already been revealed.", ephemeral=True
-        )
+        await interaction.response.send_message(f"❌ Clip #{clip_id} is already revealed.", ephemeral=True)
         return
 
     is_admin     = isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator
     is_submitter = clip["submitter_id"] == interaction.user.id
-
     if not is_admin and not is_submitter:
         await interaction.response.send_message(
             "❌ Only the clip submitter or a server admin can reveal this clip.", ephemeral=True
@@ -245,7 +324,7 @@ async def reveal(interaction: discord.Interaction, clip_id: int):
 # ── /leaderboard ───────────────────────────────────────────────────────────────
 
 @client.tree.command(name="leaderboard", description="View the rank guessing leaderboard")
-@app_commands.describe(scope="View all-time or weekly performance")
+@app_commands.describe(scope="All-time or weekly stats")
 @app_commands.choices(scope=[
     app_commands.Choice(name="All Time", value="alltime"),
     app_commands.Choice(name="Weekly",   value="weekly"),
@@ -255,25 +334,18 @@ async def leaderboard(
     scope: Optional[app_commands.Choice[str]] = None,
 ):
     scope_val = scope.value if scope else "alltime"
-
-    if scope_val == "weekly":
-        rows = await db.get_leaderboard_weekly(interaction.guild_id, limit=10)
-    else:
-        rows = await db.get_leaderboard(interaction.guild_id, limit=10)
-
-    scores = [dict(r) for r in rows]
-    embed  = emb.leaderboard_embed(scores, scope_val, interaction.guild.name)
+    rows      = await (db.get_leaderboard_weekly if scope_val == "weekly" else db.get_leaderboard)(
+        interaction.guild_id, limit=10
+    )
+    embed = emb.leaderboard_embed([dict(r) for r in rows], scope_val, interaction.guild.name)
     await interaction.response.send_message(embed=embed)
 
 
 # ── /profile ───────────────────────────────────────────────────────────────────
 
-@client.tree.command(name="profile", description="View a user's rank guessing stats")
-@app_commands.describe(user="The user to view — defaults to yourself")
-async def profile(
-    interaction: discord.Interaction,
-    user: Optional[discord.Member] = None,
-):
+@client.tree.command(name="profile", description="View a user's guessing stats")
+@app_commands.describe(user="The user to look up — defaults to yourself")
+async def profile(interaction: discord.Interaction, user: Optional[discord.Member] = None):
     target = user or interaction.user
     stats  = await db.get_user_stats(target.id, interaction.guild_id)
     embed  = emb.profile_embed(target, dict(stats) if stats else None)
@@ -283,11 +355,8 @@ async def profile(
 # ── /history ───────────────────────────────────────────────────────────────────
 
 @client.tree.command(name="history", description="View recently revealed clips in this server")
-@app_commands.describe(limit="Number of clips to show (default: 5, max: 20)")
-async def history(
-    interaction: discord.Interaction,
-    limit: int = 5,
-):
+@app_commands.describe(limit="Number of clips to show (default 5, max 20)")
+async def history(interaction: discord.Interaction, limit: int = 5):
     limit = max(1, min(limit, 20))
     clips = await db.get_history(interaction.guild_id, limit)
     embed = emb.history_embed([dict(c) for c in clips], interaction.guild.name)
