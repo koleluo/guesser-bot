@@ -145,6 +145,7 @@ class RankBot(discord.Client):
         # Re-register persistent views for all clips still awaiting guesses
         pending = await db.get_all_pending_clips()
         for clip in pending:
+            clip = dict(clip)
             self.add_view(GuessView(clip["id"], clip.get("game", "League of Legends")))
         await self.tree.sync()
         self.auto_reveal_loop.start()
