@@ -23,6 +23,7 @@ class TierButton(discord.ui.Button):
         super().__init__(
             style=discord.ButtonStyle.secondary,
             label=label,
+            emoji=ranks.get_emoji(game, tier),
             custom_id=f"tier|{clip_id}|{tier}",
             row=row,
         )
