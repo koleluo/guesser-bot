@@ -20,10 +20,12 @@ GAME_CHOICES = [app_commands.Choice(name=g, value=g) for g in ranks.GAME_CHOICES
 
 class TierButton(discord.ui.Button):
     def __init__(self, clip_id: int, game: str, tier: str, label: str, row: int):
+        raw = ranks.get_emoji(game, tier)
+        emoji = discord.PartialEmoji.from_str(raw) if raw.startswith("<") else raw
         super().__init__(
             style=discord.ButtonStyle.secondary,
             label=label,
-            emoji=ranks.get_emoji(game, tier),
+            emoji=emoji,
             custom_id=f"tier|{clip_id}|{tier}",
             row=row,
         )
