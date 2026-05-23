@@ -18,7 +18,7 @@ GAMES: dict[str, dict] = {
         },
         "emojis": {
             "Iron":        "<:iron:1512545611860279397>",
-            "Bronze":      "\U0001f7eb",
+            "Bronze":      "<:bronze:1512549713046409216>",
             "Silver":      "<:silver:1512545617937957035>",
             "Gold":        "<:gold:1512545629233221834>",
             "Platinum":    "<:platinum:1512546662659133522>",
