@@ -182,6 +182,7 @@ async def do_reveal(bot: discord.Client, clip_id: int):
         return
 
     await db.reveal_clip(clip_id)
+    clip = dict(clip)
 
     game = clip.get("game", "League of Legends")
     results = await db.score_and_update_leaderboard(
