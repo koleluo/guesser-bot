@@ -46,27 +46,6 @@ class GuessView(discord.ui.View):
             self.add_item(TierButton(clip_id, game, tier, label, row=i // 5))
 
 
-class DivisionButton(discord.ui.Button):
-    def __init__(self, clip_id: int, game: str, tier: str, division: str):
-        super().__init__(
-            style=discord.ButtonStyle.primary,
-            label=division,
-            custom_id=f"div|{clip_id}|{tier}|{division}",
-        )
-        self.clip_id  = clip_id
-        self.game     = game
-        self.tier     = tier
-        self.division = division
-
-    async def callback(self, interaction: discord.Interaction):
-        await _handle_division(interaction, self.clip_id, self.game, self.tier, self.division)
-
-
-class DivisionView(discord.ui.View):
-    def __init__(self, clip_id: int, game: str, tier: str):
-        super().__init__(timeout=60)
-        for div in ranks.get_divisions(game):
-            self.add_item(DivisionButton(clip_id, game, tier, div))
 
 
 # ── button handlers ────────────────────────────────────────────────────────────
@@ -106,33 +85,9 @@ async def _handle_tier(interaction: discord.Interaction, clip_id: int, game: str
     if clip is None:
         return
 
-    if ranks.tier_needs_division(game, tier):
-        view = DivisionView(clip_id, game, tier)
-        await interaction.response.send_message(
-            f"You picked **{tier}**. Now choose a division:",
-            view=view,
-            ephemeral=True,
-        )
-    else:
-        await db.insert_guess(clip_id, interaction.user.id, tier, "")
-        full_rank = ranks.format_rank(game, tier)
-        await interaction.response.send_message(
-            f"✅ Guess locked in: **{full_rank}**!", ephemeral=True
-        )
-
-
-async def _handle_division(
-    interaction: discord.Interaction,
-    clip_id: int, game: str, tier: str, division: str,
-):
-    clip = await _check_guess_eligible(interaction, clip_id)
-    if clip is None:
-        return
-
-    await db.insert_guess(clip_id, interaction.user.id, tier, division)
-    full_rank = ranks.format_rank(game, tier, division)
+    await db.insert_guess(clip_id, interaction.user.id, tier, "")
     await interaction.response.send_message(
-        f"✅ Guess locked in: **{full_rank}**!", ephemeral=True
+        f"✅ Guess locked in: **{ranks.format_rank(game, tier)}**!", ephemeral=True
     )
 
 
@@ -219,7 +174,6 @@ async def do_reveal(bot: discord.Client, clip_id: int):
     game="Which game is this clip from?",
     video_url="Link to the clip",
     rank="Your actual rank (start typing for suggestions)",
-    division="Your division, if applicable",
 )
 @app_commands.choices(game=GAME_CHOICES)
 async def submit_clip(
@@ -227,13 +181,11 @@ async def submit_clip(
     game: app_commands.Choice[str],
     video_url: str,
     rank: str,
-    division: Optional[str] = None,
 ):
     game_name = game.value
     tier      = rank.strip()
-    div       = division.strip() if division else ""
+    div       = ""
 
-    # Validate tier
     valid_tiers = ranks.get_tiers(game_name)
     if tier not in valid_tiers:
         await interaction.response.send_message(
@@ -241,17 +193,6 @@ async def submit_clip(
             ephemeral=True,
         )
         return
-
-    # Validate division
-    if ranks.tier_needs_division(game_name, tier) and not div:
-        divs = ranks.get_divisions(game_name)
-        await interaction.response.send_message(
-            f"❌ **{tier}** requires a division ({', '.join(divs)}).", ephemeral=True
-        )
-        return
-
-    if not ranks.tier_needs_division(game_name, tier):
-        div = ""
 
     reveal_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
     clip_id   = await db.insert_clip(
@@ -284,16 +225,6 @@ async def rank_autocomplete(interaction: discord.Interaction, current: str):
     ][:25]
 
 
-@submit_clip.autocomplete("division")
-async def division_autocomplete(interaction: discord.Interaction, current: str):
-    game_name = getattr(interaction.namespace, "game", None) or "League of Legends"
-    tier      = getattr(interaction.namespace, "rank", None) or ""
-    if not ranks.tier_needs_division(game_name, tier):
-        return []
-    return [
-        app_commands.Choice(name=d, value=d)
-        for d in ranks.get_divisions(game_name) if current in d
-    ]
 
 
 # ── /reveal ────────────────────────────────────────────────────────────────────

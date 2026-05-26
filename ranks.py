@@ -8,8 +8,6 @@ GAMES: dict[str, dict] = {
             "Iron", "Bronze", "Silver", "Gold", "Platinum",
             "Emerald", "Diamond", "Master", "Grandmaster", "Challenger",
         ],
-        "divisions": ["IV", "III", "II", "I"],
-        "no_division": {"Master", "Grandmaster", "Challenger"},
         "colors": {
             "Iron": 0x8e8e8e, "Bronze": 0xcd7f32, "Silver": 0xc0c0c0,
             "Gold": 0xffd700, "Platinum": 0x00e5cc, "Emerald": 0x50c878,
@@ -34,8 +32,6 @@ GAMES: dict[str, dict] = {
             "Iron", "Bronze", "Silver", "Gold", "Platinum",
             "Diamond", "Ascendant", "Immortal", "Radiant",
         ],
-        "divisions": ["1", "2", "3"],
-        "no_division": {"Radiant"},
         "colors": {
             "Iron": 0x777777, "Bronze": 0xcd7f32, "Silver": 0xc0c0c0,
             "Gold": 0xffd700, "Platinum": 0x00e5cc, "Diamond": 0x0099ff,
@@ -72,8 +68,6 @@ GAMES: dict[str, dict] = {
     },
     "Overwatch 2": {
         "tiers": ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster", "Champion"],
-        "divisions": ["5", "4", "3", "2", "1"],
-        "no_division": {"Champion"},
         "colors": {
             "Bronze": 0xcd7f32, "Silver": 0xc0c0c0, "Gold": 0xffd700,
             "Platinum": 0x00e5cc, "Diamond": 0x0070dd, "Master": 0x9d50bb,
@@ -101,12 +95,11 @@ def get_btn_labels(game: str) -> list[str]:
 
 
 def tier_needs_division(game: str, tier: str) -> bool:
-    config = GAMES.get(game, {})
-    return not config.get("flat") and tier not in config.get("no_division", set())
+    return False
 
 
 def get_divisions(game: str) -> list[str]:
-    return GAMES.get(game, {}).get("divisions", [])
+    return []
 
 
 def get_color(game: str, tier: str) -> int:
@@ -128,16 +121,6 @@ def score_guess(
     actual_tier: str, actual_div: str,
     guessed_tier: str, guessed_div: str,
 ) -> tuple[bool, bool, int]:
-    """Returns (is_correct, exact_match, points)."""
-    config = GAMES.get(game, {})
-    tier_match = actual_tier.lower() == guessed_tier.lower()
-
-    if not tier_match:
-        return False, False, 0
-
-    if config.get("flat"):
-        return True, True, 3
-
-    no_division = not actual_div or actual_tier in config.get("no_division", set())
-    exact = no_division or guessed_div.lower() == actual_div.lower()
-    return True, exact, 3 if exact else 1
+    """Returns (is_correct, exact_match, points). No divisions — tier match = 3pts."""
+    correct = actual_tier.lower() == guessed_tier.lower()
+    return correct, correct, 3 if correct else 0
