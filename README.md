@@ -1,31 +1,30 @@
 # Guesser Bot
 
-A Discord bot for gaming servers where members submit gameplay clips with a hidden rank, others guess the rank using buttons, and a leaderboard tracks accuracy over time.
+A Discord bot for gaming servers where members submit gameplay clips with a hidden rank, others guess the rank by clicking a button, and a leaderboard tracks accuracy over time.
 
 ---
 
 ## Features
 
-- Submit clips for **League of Legends, Valorant, Counter-Strike 2, or Overwatch 2**
-- Rank guessing via **clickable buttons** — no slash command required
-- Two-step button flow for ranks with divisions (pick tier → pick division)
+- Submit clips for **League of Legends, Valorant, Counter-Strike 2 (FACEIT), or Overwatch 2**
+- Rank guessing via **one-click buttons** — no slash command needed
 - Buttons persist across bot restarts
 - Auto-reveal after 24 hours (background task checks every 5 minutes)
-- Point scoring: 3pts exact match, 1pt correct tier, 0pts wrong
+- Point scoring: 3pts for correct rank, 0pts for wrong
 - Reveal embed shows a **guess distribution** (% of players who picked each rank)
 - All-time and weekly leaderboards
 - Per-user profile stats with accuracy %
 
 ---
 
-## Supported Games & Rank Systems
+## Supported Games & Ranks
 
-| Game | Tiers | Divisions |
-|---|---|---|
-| League of Legends | Iron → Challenger | IV–I (Iron through Diamond) |
-| Valorant | Iron → Radiant | 1–3 (Iron through Immortal) |
-| Counter-Strike 2 | Silver I → Global Elite | None (18 flat ranks) |
-| Overwatch 2 | Bronze → Champion | 5–1 (Bronze through Grandmaster) |
+| Game | Ranks |
+|---|---|
+| League of Legends | Iron, Bronze, Silver, Gold, Platinum, Emerald, Diamond, Master, Grandmaster, Challenger |
+| Valorant | Iron, Bronze, Silver, Gold, Platinum, Diamond, Ascendant, Immortal, Radiant |
+| Counter-Strike 2 | FACEIT Level 1 – Level 10 |
+| Overwatch 2 | Bronze, Silver, Gold, Platinum, Diamond, Master, Grandmaster, Champion |
 
 ---
 
@@ -94,7 +93,7 @@ Slash commands sync on startup and usually appear in Discord within a minute or 
 
 | Command | Description |
 |---|---|
-| `/submitclip` | Submit a clip. Pick a game, paste the video URL, then type your rank (autocomplete helps). The bot posts the video with rank buttons for others to guess. |
+| `/submitclip` | Submit a clip. Pick a game, paste the video URL, then type your rank (autocomplete will suggest valid options). The bot posts the video with rank buttons for others to guess. |
 | `/reveal [clip_id]` | Reveal the real rank and score all guesses. Only the submitter or a server admin can do this. |
 | `/leaderboard [scope]` | Show the top 10 guessers. Scope: `All Time` (default) or `Weekly`. |
 | `/profile [@user]` | Show guessing stats for a user. Defaults to yourself. |
@@ -102,7 +101,7 @@ Slash commands sync on startup and usually appear in Discord within a minute or 
 
 ### How guessing works
 
-There is no `/guess` command. When a clip is submitted, the bot posts it with a row of rank buttons. Click the button for your guess — if that rank has divisions, a second set of buttons appears (ephemeral, only you see it) for you to pick the division.
+There is no `/guess` command. When a clip is submitted, the bot posts it with a row of rank buttons. Click the button for your rank guess — it's locked in immediately. Your guess is private (ephemeral) so other players can't see it.
 
 ---
 
@@ -110,21 +109,16 @@ There is no `/guess` command. When a clip is submitted, the bot posts it with a 
 
 | Result | Points |
 |---|---|
-| Exact match (correct tier **and** division) | 3 pts |
-| Correct tier only | 1 pt |
+| Correct rank | 3 pts |
 | Wrong | 0 pts |
 
-For ranks with no division (Master+, Radiant, Global Elite, Champion), matching the tier counts as an exact match.
-
-After revealing, the embed shows a breakdown of how all guessers spread across each rank.
+After revealing, the embed shows a breakdown of what percentage of guessers picked each rank.
 
 ---
 
 ## Database
 
 All data is stored in `database.db` (SQLite), created automatically on first run. The file is gitignored. To reset everything, delete it.
-
-If you were running an older version of this bot, the database will be automatically migrated to add the `game` column on next startup — no action needed.
 
 ---
 
@@ -133,4 +127,4 @@ If you were running an older version of this bot, the database will be automatic
 - The bot checks every **5 minutes** for clips past their 24-hour reveal window and auto-reveals them
 - Guess responses are ephemeral — other players can't see what you picked
 - Submitters cannot guess on their own clips
-- Rank buttons survive bot restarts — any pending clip's buttons will still work after a reboot
+- Rank buttons survive bot restarts — pending clips stay interactive after a reboot
