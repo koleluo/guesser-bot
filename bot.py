@@ -97,6 +97,7 @@ class RankBot(discord.Client):
     def __init__(self):
         super().__init__(intents=discord.Intents.default())
         self.tree = app_commands.CommandTree(self)
+        self._synced = False
 
     async def setup_hook(self):
         await db.create_tables()
@@ -105,12 +106,17 @@ class RankBot(discord.Client):
         for clip in pending:
             clip = dict(clip)
             self.add_view(GuessView(clip["id"], clip.get("game", "League of Legends")))
-        await self.tree.sync()
         self.auto_reveal_loop.start()
 
     async def on_ready(self):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print(f"Connected to {len(self.guilds)} guild(s)")
+        if not self._synced:
+            await self.tree.sync()
+            for guild in self.guilds:
+                await self.tree.sync(guild=guild)
+                print(f"Synced commands to {guild.name}")
+            self._synced = True
 
     @tasks.loop(minutes=5)
     async def auto_reveal_loop(self):
@@ -219,14 +225,18 @@ async def submit_clip(
 async def rank_autocomplete(interaction: discord.Interaction, current: str):
     try:
         game_name = getattr(interaction.namespace, "game", None)
+        print(f"[autocomplete] game_name={game_name!r}  current={current!r}")
         if not isinstance(game_name, str) or game_name not in ranks.GAMES:
             game_name = "League of Legends"
         tiers = ranks.get_tiers(game_name)
-        return [
+        choices = [
             app_commands.Choice(name=t, value=t)
             for t in tiers if current.lower() in t.lower()
         ][:25]
-    except Exception:
+        print(f"[autocomplete] returning {len(choices)} choices")
+        return choices
+    except Exception as e:
+        print(f"[autocomplete] ERROR: {e!r}")
         return []
 
 
