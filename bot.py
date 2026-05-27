@@ -225,18 +225,14 @@ async def submit_clip(
 async def rank_autocomplete(interaction: discord.Interaction, current: str):
     try:
         game_name = getattr(interaction.namespace, "game", None)
-        print(f"[autocomplete] game_name={game_name!r}  current={current!r}")
         if not isinstance(game_name, str) or game_name not in ranks.GAMES:
             game_name = "League of Legends"
         tiers = ranks.get_tiers(game_name)
-        choices = [
+        return [
             app_commands.Choice(name=t, value=t)
             for t in tiers if current.lower() in t.lower()
         ][:25]
-        print(f"[autocomplete] returning {len(choices)} choices")
-        return choices
-    except Exception as e:
-        print(f"[autocomplete] ERROR: {e!r}")
+    except Exception:
         return []
 
 
