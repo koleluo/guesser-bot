@@ -217,12 +217,17 @@ async def submit_clip(
 
 @submit_clip.autocomplete("rank")
 async def rank_autocomplete(interaction: discord.Interaction, current: str):
-    game_name = getattr(interaction.namespace, "game", None) or "League of Legends"
-    tiers     = ranks.get_tiers(game_name)
-    return [
-        app_commands.Choice(name=t, value=t)
-        for t in tiers if current.lower() in t.lower()
-    ][:25]
+    try:
+        game_name = getattr(interaction.namespace, "game", None)
+        if not isinstance(game_name, str) or game_name not in ranks.GAMES:
+            game_name = "League of Legends"
+        tiers = ranks.get_tiers(game_name)
+        return [
+            app_commands.Choice(name=t, value=t)
+            for t in tiers if current.lower() in t.lower()
+        ][:25]
+    except Exception:
+        return []
 
 
 
