@@ -213,7 +213,7 @@ async def submit_clip(
     )
 
     view    = GuessView(clip_id, game_name)
-    content = emb.submission_content(clip_id, game_name, interaction.user.display_name, reveal_at)
+    content = emb.submission_content(clip_id, game_name, reveal_at)
     await interaction.response.send_message(content=f"{content}\n{video_url}", view=view)
     client.add_view(view)  # register for persistence after this message is sent
 

@@ -12,12 +12,12 @@ def _parse_dt(dt_str: str) -> datetime:
 
 # ── submission ─────────────────────────────────────────────────────────────────
 
-def submission_content(clip_id: int, game: str, submitter_name: str, reveal_at: str) -> str:
+def submission_content(clip_id: int, game: str, reveal_at: str) -> str:
     """Plain-text content for the submission message (Discord auto-embeds the URL)."""
     ts = int(_parse_dt(reveal_at).timestamp())
     return (
         f"\U0001f3ae **{game} — Clip #{clip_id}**\n"
-        f"Submitted by **{submitter_name}** | Reveals <t:{ts}:R>\n"
+        f"Reveals <t:{ts}:R>\n"
         f"Click a button below to guess the rank!"
     )
 
