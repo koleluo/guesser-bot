@@ -38,9 +38,15 @@ GAMES: dict[str, dict] = {
             "Ascendant": 0x00c851, "Immortal": 0xff3860, "Radiant": 0xffe97a,
         },
         "emojis": {
-            "Iron": "⬛", "Bronze": "\U0001f7eb", "Silver": "⬜",
-            "Gold": "\U0001f7e8", "Platinum": "\U0001fa75", "Diamond": "\U0001f537",
-            "Ascendant": "\U0001f7e2", "Immortal": "\U0001f534", "Radiant": "⭐",
+            "Iron":      "<:valiron:1512643419929968660>",
+            "Bronze":    "<:valbronze:1512643456047251516>",
+            "Silver":    "<:valsilver:1512643398954123424>",
+            "Gold":      "<:valgold:1512643630492549300>",
+            "Platinum":  "<:valplatinum:1512643462820921435>",
+            "Diamond":   "<:valdiamond:1512643469468766341>",
+            "Ascendant": "<:valascendant:1512643441065070632>",
+            "Immortal":  "<:valimmortal:1512643411805732935>",
+            "Radiant":   "<:radiant:1512546897452073080>",
         },
     },
     "Counter-Strike 2": {
