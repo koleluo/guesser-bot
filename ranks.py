@@ -86,9 +86,14 @@ GAMES: dict[str, dict] = {
             "Grandmaster": 0xff8c00, "Champion": 0xffe97a,
         },
         "emojis": {
-            "Bronze": "\U0001f7eb", "Silver": "⬜", "Gold": "\U0001f7e8",
-            "Platinum": "\U0001fa75", "Diamond": "\U0001f537", "Master": "\U0001f7e3",
-            "Grandmaster": "\U0001f7e0", "Champion": "\U0001f3c6",
+            "Bronze":      "<:owbronze:1512547497434677501>",
+            "Silver":      "<:owsilver:1512547541978452078>",
+            "Gold":        "<:owgold:1512547505856974918>",
+            "Platinum":    "<:owplat:1512547521933611059>",
+            "Diamond":     "<:owdia:1512547534235762749>",
+            "Master":      "<:owmaster:1512547490040123422>",
+            "Grandmaster": "<:owgm:1512548162718662706>",
+            "Champion":    "<:ow500:1512547515075924089>",
         },
     },
 }
