@@ -10,7 +10,7 @@ A Discord bot for gaming servers where members submit gameplay clips with a hidd
 
 | Submitting a Clip | Rank Guess Buttons | Reveal & Results |
 |:---:|:---:|:---:|
-| ![Submitting a clip](screenshots/submit.png) | ![Rank guess buttons](screenshots/guess.png) | ![Reveal embed with results](screenshots/reveal.png) |
+| ![Submitting a clip](https://cdn.discordapp.com/attachments/1512542345646571614/1512646418861527130/image.png?ex=6a24d941&is=6a2387c1&hm=f221aa667fad9b7f167c7ad8bb6fe9553164d76e89eb51b9cada51687cc6044d&) | ![Rank guess buttons](https://cdn.discordapp.com/attachments/1512542345646571614/1512647317931557105/image.png?ex=6a24da18&is=6a238898&hm=76e577259a2d8b93fa2f9fbc471d61d52d1f4139e9fa33e160f9070ff8cd4c09&)|
 
 ---
 
