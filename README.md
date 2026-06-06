@@ -4,13 +4,24 @@ A Discord bot for gaming servers where members submit gameplay clips with a hidd
 
 ---
 
+## Screenshots
+
+> Replace the images below with your own screenshots. Drop the files into a `screenshots/` folder in the repo and update the paths.
+
+| Submitting a Clip | Rank Guess Buttons | Reveal & Results |
+|:---:|:---:|:---:|
+| ![Submitting a clip](screenshots/submit.png) | ![Rank guess buttons](screenshots/guess.png) | ![Reveal embed with results](screenshots/reveal.png) |
+
+---
+
 ## Features
 
 - Submit clips for **League of Legends, Valorant, Counter-Strike 2 (FACEIT), or Overwatch 2**
-- Rank guessing via **one-click buttons** — no slash command needed
+- Rank guessing via **one-click buttons** with custom rank emoji icons — no slash command needed
+- Clip submitter is **anonymous** until the reveal
 - Buttons persist across bot restarts
 - Auto-reveal after 24 hours (background task checks every 5 minutes)
-- Point scoring: 3pts for correct rank, 0pts for wrong
+- Point scoring: **3 pts** for correct rank, **0 pts** for wrong
 - Reveal embed shows a **guess distribution** (% of players who picked each rank)
 - All-time and weekly leaderboards
 - Per-user profile stats with accuracy %
@@ -83,9 +94,10 @@ You should see:
 ```
 Logged in as YourBot#1234 (ID: ...)
 Connected to 1 guild(s)
+Synced commands to YourServer
 ```
 
-Slash commands sync on startup and usually appear in Discord within a minute or two.
+Slash commands sync automatically on startup.
 
 ---
 
@@ -93,7 +105,7 @@ Slash commands sync on startup and usually appear in Discord within a minute or 
 
 | Command | Description |
 |---|---|
-| `/submitclip` | Submit a clip. Pick a game, paste the video URL, then type your rank (autocomplete will suggest valid options). The bot posts the video with rank buttons for others to guess. |
+| `/submitclip` | Submit a clip. Pick a game, paste the video URL, then type your rank (autocomplete will suggest valid options). The bot posts the video anonymously with rank buttons for others to guess. |
 | `/reveal [clip_id]` | Reveal the real rank and score all guesses. Only the submitter or a server admin can do this. |
 | `/leaderboard [scope]` | Show the top 10 guessers. Scope: `All Time` (default) or `Weekly`. |
 | `/profile [@user]` | Show guessing stats for a user. Defaults to yourself. |
@@ -101,7 +113,7 @@ Slash commands sync on startup and usually appear in Discord within a minute or 
 
 ### How guessing works
 
-There is no `/guess` command. When a clip is submitted, the bot posts it with a row of rank buttons. Click the button for your rank guess — it's locked in immediately. Your guess is private (ephemeral) so other players can't see it.
+There is no `/guess` command. When a clip is submitted, the bot posts it with a row of rank buttons. Click the button for your rank guess — it's locked in immediately. Your guess is private (ephemeral) so other players can't see it. The submitter's identity is hidden until the reveal.
 
 ---
 
@@ -128,3 +140,4 @@ All data is stored in `database.db` (SQLite), created automatically on first run
 - Guess responses are ephemeral — other players can't see what you picked
 - Submitters cannot guess on their own clips
 - Rank buttons survive bot restarts — pending clips stay interactive after a reboot
+- Custom rank emoji icons are supported for all four games
